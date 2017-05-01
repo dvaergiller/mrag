@@ -9,11 +9,8 @@ import qualified Data.Text as T
 main = run 8083 waiApp
 
 waiApp request respond =
-  if requestMethod request == "POST"
-  then strictRequestBody request >>= doPost path >>= respond
-  else respond $ responseLBS status405 [] "Method not Allowed"
+  strictRequestBody request >>= doPost >>= respond
   where path = joinPath $ "docroot" : map T.unpack (pathInfo request)
-
-doPost path content = do
-  BS.appendFile path (BS.append content "\n")
-  return (responseLBS status200 [] "")
+        doPost content = do
+          BS.appendFile path (BS.append content "\n")
+          return (responseLBS status200 [] "")
