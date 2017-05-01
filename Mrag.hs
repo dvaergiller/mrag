@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-import Control.Monad
 import Data.Char
 import Network.HTTP.Types
 import Network.Wai
@@ -11,7 +10,17 @@ import qualified Control.Concurrent.Lock as L
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.Text as T
 
-application lock docRoot request respond = response >>= respond
+main = do
+  args <- getArgs
+  lock <- L.new
+  case args of
+    [port, docRoot] | all isDigit port ->
+      run (read port) $ waiApp lock docRoot
+    _ ->
+      usage
+  where usage = putStrLn "Usage: mrag <PORT> <DOCROOT>"
+
+waiApp lock docRoot request respond = response >>= respond
   where path = joinPath $ docRoot : map T.unpack (pathInfo request)
         response =
           case requestMethod request of
@@ -21,25 +30,12 @@ application lock docRoot request respond = response >>= respond
 
 doGet path = do
   exists <- doesFileExist path
-  if exists
-    then return $ responseFile status200 [] path Nothing
-    else return $ responseLBS status404 [] "Not Found"
+  return $ if exists
+           then responseFile status200 [] path Nothing
+           else responseLBS status404 [] "Not Found"
 
-doPost lock path content = do
-  appendLine lock path content
-  return $ responseLBS status200 [] ""
-
-appendLine lock path content =
-  L.with lock $
-  do
-    createDirectoryIfMissing True $ takeDirectory path
-    BS.appendFile path content >> BS.appendFile path "\n"
-
-main = do
-  args <- getArgs
-  lock <- L.new
-  case args of
-    [port, _] | not $ all isDigit port -> usage
-    [port, docRoot] -> run (read port) $ application lock docRoot
-    _ -> usage
-  where usage = putStrLn "Usage: mrag <PORT> <DOCROOT>"
+doPost lock path content =
+  L.with lock appendLine >> return (responseLBS status200 [] "")
+  where appendLine = do
+          createDirectoryIfMissing True $ takeDirectory path
+          BS.appendFile path $ BS.append content "\n"
